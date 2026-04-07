@@ -14,10 +14,14 @@
     "auth": "tsx src/mcp-auth.ts",
     "mcp": "tsx src/mcp-server.ts",
     "mcp:auth": "tsx src/mcp-auth.ts",
-    "start": "node dist/mcp-server.js"
+    "start": "node dist/mcp-server.js",
+    "proxy": "mcp-proxy --port 8080 -- node dist/mcp-server.js",
+    "proxy:sse": "mcp-proxy --server sse --port 8080 -- node dist/mcp-server.js",
+    "proxy:stream": "mcp-proxy --server stream --port 8080 -- node dist/mcp-server.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "mcp-proxy": "^6.4.4",
     "open": "^10.1.0"
   },
   "devDependencies": {

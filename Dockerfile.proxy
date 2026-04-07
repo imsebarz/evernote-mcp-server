@@ -1,0 +1,32 @@
+# Build stage
+FROM node:20-alpine AS build
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci
+
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build
+
+# Runtime stage (proxy)
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+COPY --from=build /app/dist ./dist
+COPY README.md mcp.json .
+
+# Tokens path (mount a volume and point here)
+ENV EVERNOTE_TOKEN_PATH=/data/tokens.json
+
+# Proxy settings
+ENV MCP_PROXY_HOST=0.0.0.0
+ENV MCP_PROXY_PORT=8080
+# Optional: set MCP_PROXY_API_KEY to protect the endpoint
+# Optional: set MCP_PROXY_SERVER=sse|stream (default: both)
+
+CMD ["sh", "-c", "./node_modules/.bin/mcp-proxy --host ${MCP_PROXY_HOST:-0.0.0.0} --port ${MCP_PROXY_PORT:-8080} ${MCP_PROXY_API_KEY:+--apiKey $MCP_PROXY_API_KEY} ${MCP_PROXY_SERVER:+--server $MCP_PROXY_SERVER} -- node dist/mcp-server.js"]

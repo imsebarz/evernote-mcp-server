@@ -238,6 +238,52 @@ docker run -d \
 
 ---
 
+## MCP Proxy (stdio → HTTP/SSE)
+
+If you need **remote access** (HTTP/SSE), use the proxy. This exposes the stdio MCP server over HTTP.
+
+### Local run
+```bash
+# Build first
+npm run build
+
+# Run proxy (both SSE + streamable HTTP)
+npm run proxy
+
+# Or explicitly choose SSE / stream
+npm run proxy:sse
+npm run proxy:stream
+```
+
+### Docker (proxy)
+Build with the proxy Dockerfile:
+```bash
+docker build -f Dockerfile.proxy -t evernote-mcp-proxy:latest .
+```
+
+Run:
+```bash
+docker run -d \
+  --name evernote-mcp-proxy \
+  -e EVERNOTE_TOKEN_PATH=/data/tokens.json \
+  -e MCP_PROXY_PORT=8080 \
+  -e MCP_PROXY_API_KEY=YOUR_SECRET \
+  -v /opt/evernote-mcp:/data \
+  -p 8080:8080 \
+  evernote-mcp-proxy:latest
+```
+
+### Dokploy (proxy) settings
+- **Dockerfile:** `Dockerfile.proxy`
+- **Env:**
+  - `EVERNOTE_TOKEN_PATH=/data/tokens.json`
+  - `MCP_PROXY_PORT=8080`
+  - `MCP_PROXY_API_KEY=...` (recommended)
+- **Volume:** `/opt/evernote-mcp:/data`
+- **Port:** `8080`
+
+---
+
 ## Disclaimer
 
 This is an unofficial client based on reverse engineering the Evernote web application. It is not affiliated with, endorsed by, or supported by Evernote Corporation. Use at your own risk. The internal API may change without notice.
