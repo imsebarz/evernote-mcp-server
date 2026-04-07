@@ -1,0 +1,27 @@
+{
+  "name": "evernote-unofficial-api",
+  "version": "2.0.0",
+  "description": "Unofficial Evernote API client & MCP server — reverse-engineered from the Evernote Web App",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "evernote-mcp": "dist/mcp-server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/example.ts",
+    "auth": "tsx src/auth-server.ts",
+    "mcp": "tsx src/mcp-server.ts",
+    "mcp:auth": "tsx src/mcp-auth.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "open": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.4.0"
+  }
+}
