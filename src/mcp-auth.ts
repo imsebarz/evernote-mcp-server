@@ -14,7 +14,8 @@ async function main() {
   console.log("╚══════════════════════════════════════════════════╝\n");
 
   try {
-    const tokens = await authenticate();
+    const tokenPath = process.env.EVERNOTE_TOKEN_PATH || undefined;
+    const tokens = await authenticate({ tokenPath });
 
     console.log("\n╔══════════════════════════════════════════════════╗");
     console.log("║  ✓ Authentication successful!                   ║");

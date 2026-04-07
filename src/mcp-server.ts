@@ -679,8 +679,10 @@ async function handleToolCall(
 // ─── Main ──────────────────────────────────────────────────
 
 async function main() {
+  const tokenPath = process.env.EVERNOTE_TOKEN_PATH || undefined;
+
   // 1. Load auth tokens
-  const tokens = await loadTokens();
+  const tokens = await loadTokens(tokenPath);
 
   if (!tokens) {
     console.error(
@@ -697,7 +699,7 @@ async function main() {
   if (tokens.expiresAt < Date.now() + 60_000 && tokens.refreshToken) {
     try {
       activeTokens = await refreshTokens(tokens);
-      await saveTokens(activeTokens);
+      await saveTokens(activeTokens, tokenPath);
       console.error("Tokens refreshed successfully");
     } catch {
       console.error("Warning: Token refresh failed, using existing tokens");
@@ -705,7 +707,7 @@ async function main() {
   }
 
   // 3. Create client
-  const client = new EvernoteClient(activeTokens);
+  const client = new EvernoteClient(activeTokens, tokenPath);
 
   // 4. Create MCP server
   const server = new Server(

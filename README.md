@@ -196,6 +196,48 @@ Your Code → EvernoteClient → api.evernote.com (REST /v1/*)
 
 Auth tokens are obtained via OAuth2 PKCE against `accounts.evernote.com` — the same flow the official web client uses.
 
+---
+
+## Production / Dokploy (Docker)
+
+> **Important:** This MCP server uses **stdio transport**. To use it remotely, your agents must run on the same host/container or you must add a proxy layer (e.g., mcp‑proxy / stdio bridge). If your agents already run in the VPS, you can deploy this container and point them to the command inside it.
+
+### 1) Build the image
+```bash
+docker build -t evernote-mcp-server:latest .
+```
+
+### 2) Prepare tokens (one‑time)
+You need a valid token file. Run auth **once** on a machine with a browser:
+```bash
+# Option A: locally (recommended)
+EVERNOTE_TOKEN_PATH=./tokens.json npx tsx src/mcp-auth.ts
+
+# Then upload tokens.json to the server
+```
+
+Or run inside a container and mount `/data`:
+```bash
+docker run --rm -it -v $PWD/data:/data -e EVERNOTE_TOKEN_PATH=/data/tokens.json evernote-mcp-server:latest node dist/mcp-auth.js
+```
+
+### 3) Run in production
+```bash
+docker run -d \
+  --name evernote-mcp-server \
+  -e EVERNOTE_TOKEN_PATH=/data/tokens.json \
+  -v /opt/evernote-mcp:/data \
+  evernote-mcp-server:latest
+```
+
+### Dokploy settings (suggested)
+- **Image**: `evernote-mcp-server:latest`
+- **Env**: `EVERNOTE_TOKEN_PATH=/data/tokens.json`
+- **Volume**: `/opt/evernote-mcp:/data`
+- **Port**: none (stdio server)
+
+---
+
 ## Disclaimer
 
 This is an unofficial client based on reverse engineering the Evernote web application. It is not affiliated with, endorsed by, or supported by Evernote Corporation. Use at your own risk. The internal API may change without notice.

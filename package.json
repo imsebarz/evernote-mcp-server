@@ -11,9 +11,10 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/example.ts",
-    "auth": "tsx src/auth-server.ts",
+    "auth": "tsx src/mcp-auth.ts",
     "mcp": "tsx src/mcp-server.ts",
-    "mcp:auth": "tsx src/mcp-auth.ts"
+    "mcp:auth": "tsx src/mcp-auth.ts",
+    "start": "node dist/mcp-server.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
