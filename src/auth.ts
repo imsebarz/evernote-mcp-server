@@ -4,6 +4,7 @@
 // ============================================================
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createInterface } from "node:readline";
 import { randomBytes, createHash } from "node:crypto";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -206,14 +207,33 @@ export async function loadTokens(
   }
 }
 
+// --- Helper: read one line from stdin ---
+
+function prompt(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  return new Promise((resolve) => {
+    rl.question(question, (answer: string) => {
+      rl.close();
+      resolve(answer.trim());
+    });
+  });
+}
+
 // --- Full Interactive OAuth2 PKCE Flow ---
-// Spins up a local HTTP server, opens the browser for login,
-// captures the callback, exchanges the code, and returns tokens.
+// Opens the browser for Evernote login. After the redirect back to
+// evernote.com, the user pastes the resulting URL so we can extract
+// the authorization code and exchange it for tokens.
+//
+// Why not localhost callback?  Evernote's auth server rejects
+// redirect_uri values pointing to localhost — only
+// https://www.evernote.com/client/web is whitelisted for the
+// evernote-web-client OAuth2 client_id.
+
+const WEB_REDIRECT_URI = "https://www.evernote.com/client/web";
 
 export async function authenticate(
   config: OAuthConfig = {}
 ): Promise<AuthTokens> {
-  const port = config.port ?? DEFAULT_PORT;
   const tokenPath = config.tokenPath ?? DEFAULT_TOKEN_PATH;
 
   // 1. Check for existing valid tokens
@@ -231,104 +251,76 @@ export async function authenticate(
       await saveTokens(refreshed, tokenPath);
       console.log("✓ Tokens refreshed successfully");
       return refreshed;
-    } catch (e) {
+    } catch {
       console.log("⚠ Token refresh failed, starting fresh login...");
     }
   }
 
-  // 3. Full OAuth2 PKCE flow
-  const redirectUri = `http://localhost:${port}/callback`;
-  const { url, state, codeVerifier } = buildAuthorizationUrl(redirectUri);
+  // 3. Full OAuth2 PKCE flow (browser-based)
+  const { url, state, codeVerifier } = buildAuthorizationUrl(WEB_REDIRECT_URI);
 
-  return new Promise<AuthTokens>((resolve, reject) => {
-    const server = createServer(
-      async (req: IncomingMessage, res: ServerResponse) => {
-        const reqUrl = new URL(req.url || "/", `http://localhost:${port}`);
+  console.log(`\n🔐 Evernote OAuth2 + PKCE Authentication\n`);
 
-        if (reqUrl.pathname === "/callback") {
-          const code = reqUrl.searchParams.get("code");
-          const returnedState = reqUrl.searchParams.get("state");
-          const error = reqUrl.searchParams.get("error");
+  // Try to open browser automatically
+  try {
+    const open = await import("open");
+    await open.default(url);
+    console.log(`📎 Browser opened for login.`);
+  } catch {
+    console.log(`⚠ Could not open browser automatically.`);
+    console.log(`  Open this URL manually:\n`);
+    console.log(`  ${url}\n`);
+  }
 
-          if (error) {
-            res.writeHead(400, { "Content-Type": "text/html" });
-            res.end(`<h1>Authentication Error</h1><p>${error}</p>`);
-            server.close();
-            reject(new Error(`OAuth error: ${error}`));
-            return;
-          }
+  console.log(`\nAfter logging in, Evernote will redirect you to a page.`);
+  console.log(`The URL bar will briefly show a "?code=..." parameter`);
+  console.log(`(the Evernote SPA may strip it quickly — that's OK).`);
+  console.log(`\nCopy the FULL URL from your browser and paste it here.`);
+  console.log(`Tip: In Chrome, open DevTools → Console and run:`);
+  console.log(`  performance.getEntriesByType('navigation')[0].name`);
+  console.log(`to recover the code even after the SPA strips it.\n`);
 
-          if (!code || returnedState !== state) {
-            res.writeHead(400, { "Content-Type": "text/html" });
-            res.end("<h1>Invalid callback</h1><p>State mismatch or missing code.</p>");
-            server.close();
-            reject(new Error("State mismatch or missing authorization code"));
-            return;
-          }
+  const pastedUrl = await prompt("Paste URL here: ");
 
-          try {
-            // Exchange code for tokens
-            const tokens = await exchangeCodeForTokens(
-              code,
-              codeVerifier,
-              redirectUri
-            );
+  // Extract code from the pasted URL
+  let code: string | null = null;
+  try {
+    const parsed = new URL(pastedUrl);
+    code = parsed.searchParams.get("code");
+  } catch {
+    // Maybe they just pasted the code directly
+    if (pastedUrl.length > 30 && !pastedUrl.includes(" ")) {
+      code = pastedUrl;
+    }
+  }
 
-            // Persist tokens
-            await saveTokens(tokens, tokenPath);
-
-            // Success page
-            res.writeHead(200, { "Content-Type": "text/html" });
-            res.end(`
-              <!DOCTYPE html>
-              <html>
-                <head><title>Evernote Auth Success</title></head>
-                <body style="font-family: system-ui; text-align: center; padding: 60px;">
-                  <h1 style="color: #00A82D;">✓ Authenticated!</h1>
-                  <p>You can close this window and return to your terminal.</p>
-                  <p style="color: #666; font-size: 14px;">
-                    User ID: ${tokens.userId} · Shard: ${tokens.shard}
-                  </p>
-                </body>
-              </html>
-            `);
-
-            server.close();
-            console.log(`✓ Authenticated! User: ${tokens.userId}, Shard: ${tokens.shard}`);
-            resolve(tokens);
-          } catch (err) {
-            res.writeHead(500, { "Content-Type": "text/html" });
-            res.end(`<h1>Token Exchange Failed</h1><p>${err}</p>`);
-            server.close();
-            reject(err);
-          }
-        } else {
-          res.writeHead(404);
-          res.end("Not found");
-        }
-      }
+  if (!code) {
+    throw new Error(
+      "Could not extract authorization code from the URL. " +
+        "Make sure you paste the full URL including the ?code= parameter."
     );
+  }
 
-    server.listen(port, async () => {
-      console.log(`\n🔐 Evernote OAuth2 + PKCE Authentication`);
-      console.log(`   Callback server listening on http://localhost:${port}`);
-      console.log(`\n📎 Opening browser for login...\n`);
+  // Verify state if present
+  try {
+    const parsed = new URL(pastedUrl);
+    const returnedState = parsed.searchParams.get("state");
+    if (returnedState && returnedState !== state) {
+      throw new Error("OAuth state mismatch — possible CSRF attack.");
+    }
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("state mismatch")) throw e;
+    // Not a valid URL, skip state check
+  }
 
-      // Try to open browser
-      try {
-        const open = await import("open");
-        await open.default(url);
-      } catch {
-        console.log(`⚠ Could not open browser automatically.`);
-        console.log(`  Open this URL manually:\n`);
-        console.log(`  ${url}\n`);
-      }
-    });
+  console.log(`\n↻ Exchanging code for tokens...`);
 
-    // Timeout after 5 minutes
-    setTimeout(() => {
-      server.close();
-      reject(new Error("Authentication timed out (5 minutes)"));
-    }, 5 * 60 * 1000);
-  });
+  const tokens = await exchangeCodeForTokens(code, codeVerifier, WEB_REDIRECT_URI);
+
+  await saveTokens(tokens, tokenPath);
+
+  console.log(`✓ Authenticated! User: ${tokens.userId}, Shard: ${tokens.shard}`);
+  console.log(`  Tokens saved to ${tokenPath}\n`);
+
+  return tokens;
 }
