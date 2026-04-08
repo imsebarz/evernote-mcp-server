@@ -149,6 +149,46 @@ const tools: Tool[] = [
     },
   },
 
+  // --- List ---
+  {
+    name: "list_notebooks",
+    description: "List all notebooks in the account.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+
+  // --- Get by ID ---
+  {
+    name: "get_note",
+    description: "Get a note by ID with its full content.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        noteId: {
+          type: "string",
+          description: "ID of the note to retrieve",
+        },
+      },
+      required: ["noteId"],
+    },
+  },
+  {
+    name: "get_notebook",
+    description: "Get a notebook by ID.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        notebookId: {
+          type: "string",
+          description: "ID of the notebook to retrieve",
+        },
+      },
+      required: ["notebookId"],
+    },
+  },
+
   // --- Notebooks ---
   {
     name: "create_notebook",
@@ -550,6 +590,23 @@ async function handleToolCall(
         args.noteId as string,
         args.reminderTime as number
       );
+      return formatResponse(result);
+    }
+
+    // --- List ---
+    case "list_notebooks": {
+      const result = await client.listNotebooks();
+      return formatResponse(result);
+    }
+
+    // --- Get by ID ---
+    case "get_note": {
+      const result = await client.getNote(args.noteId as string);
+      return formatResponse(result);
+    }
+
+    case "get_notebook": {
+      const result = await client.getNotebook(args.notebookId as string);
       return formatResponse(result);
     }
 

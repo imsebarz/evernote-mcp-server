@@ -29,4 +29,4 @@ ENV MCP_PROXY_PORT=8080
 # Optional: set MCP_PROXY_API_KEY to protect the endpoint
 # Optional: set MCP_PROXY_SERVER=sse|stream (default: both)
 
-CMD ["sh", "-c", "./node_modules/.bin/mcp-proxy --host ${MCP_PROXY_HOST:-0.0.0.0} --port ${MCP_PROXY_PORT:-8080} ${MCP_PROXY_API_KEY:+--apiKey $MCP_PROXY_API_KEY} ${MCP_PROXY_SERVER:+--server $MCP_PROXY_SERVER} -- node dist/mcp-server.js"]
+CMD ["node", "dist/api-server.js"]

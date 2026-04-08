@@ -174,6 +174,24 @@ export class EvernoteClient {
     });
   }
 
+  // ─── Get by ID ──────────────────────────────────────────
+
+  /** Get a single note by ID (full content) */
+  async getNote(noteId: string): Promise<ApiResponse<Note>> {
+    return this.request<Note>(
+      "GET",
+      `/v1/notes/${encodeURIComponent(noteId)}`
+    );
+  }
+
+  /** Get a single notebook by ID */
+  async getNotebook(notebookId: string): Promise<ApiResponse<Notebook>> {
+    return this.request<Notebook>(
+      "GET",
+      `/v1/notebooks/${encodeURIComponent(notebookId)}`
+    );
+  }
+
   // ─── Notes ───────────────────────────────────────────────
 
   /**
