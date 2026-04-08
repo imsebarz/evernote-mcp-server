@@ -149,11 +149,13 @@ export async function refreshTokens(
       grant_type: "refresh_token",
       refresh_token: tokens.refreshToken,
       client_id: CLIENT_ID,
+      redirect_uri: tokens.redirectUri || "https://www.evernote.com/client/web",
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`Token refresh failed (${response.status})`);
+    const errorText = await response.text();
+    throw new Error(`Token refresh failed (${response.status}): ${errorText}`);
   }
 
   const data = await response.json();
