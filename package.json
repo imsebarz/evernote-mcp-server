@@ -1,6 +1,6 @@
 {
   "name": "evernote-unofficial-api",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Unofficial Evernote API client & MCP server — reverse-engineered from the Evernote Web App",
   "type": "module",
   "main": "dist/index.js",
@@ -14,7 +14,8 @@
     "auth": "tsx src/mcp-auth.ts",
     "mcp": "tsx src/mcp-server.ts",
     "mcp:auth": "tsx src/mcp-auth.ts",
-    "start": "node dist/mcp-server.js",
+    "start": "node dist/api-server.js",
+    "start:mcp": "node dist/mcp-server.js",
     "proxy": "mcp-proxy --port 8080 -- node dist/mcp-server.js",
     "proxy:sse": "mcp-proxy --server sse --port 8080 -- node dist/mcp-server.js",
     "proxy:stream": "mcp-proxy --server stream --port 8080 -- node dist/mcp-server.js",

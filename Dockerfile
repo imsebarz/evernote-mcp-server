@@ -23,4 +23,4 @@ COPY README.md mcp.json .
 # Tokens path (mount a volume and point here)
 ENV EVERNOTE_TOKEN_PATH=/data/tokens.json
 
-CMD ["node", "dist/mcp-server.js"]
+CMD ["node", "dist/api-server.js"]
