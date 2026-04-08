@@ -152,6 +152,28 @@ export class EvernoteClient {
     return this.request("GET", "/v1/users/me/devices");
   }
 
+  // ─── List endpoints ──────────────────────────────────────
+
+  /** List all notebooks */
+  async listNotebooks(): Promise<ApiResponse<Notebook[]>> {
+    return this.request<Notebook[]>("GET", "/v1/notebooks");
+  }
+
+  /** List all tags */
+  async listTags(): Promise<ApiResponse<Tag[]>> {
+    return this.request<Tag[]>("GET", "/v1/tags");
+  }
+
+  /** List notes (uses search with wildcard) */
+  async listNotes(maxResults: number = 50): Promise<ApiResponse<SearchResult[]>> {
+    return this.request<SearchResult[]>("GET", "/v1/search/semantic", undefined, {
+      naturalLanguageQuery: "*",
+      maxResults,
+      clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      keywordSearchFallback: true,
+    });
+  }
+
   // ─── Notes ───────────────────────────────────────────────
 
   /**

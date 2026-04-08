@@ -17,7 +17,8 @@
     "start": "node dist/mcp-server.js",
     "proxy": "mcp-proxy --port 8080 -- node dist/mcp-server.js",
     "proxy:sse": "mcp-proxy --server sse --port 8080 -- node dist/mcp-server.js",
-    "proxy:stream": "mcp-proxy --server stream --port 8080 -- node dist/mcp-server.js"
+    "proxy:stream": "mcp-proxy --server stream --port 8080 -- node dist/mcp-server.js",
+    "api": "tsx src/api-server.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
