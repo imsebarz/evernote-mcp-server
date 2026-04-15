@@ -4,6 +4,8 @@ dist/
 *.js.map
 *.d.ts
 !src/**
+!vendor/**/*.js
+!vendor/**/*.js.map
 .env
 .evernote-api/
 tokens.json
