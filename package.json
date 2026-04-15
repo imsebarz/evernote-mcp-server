@@ -24,7 +24,8 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "mcp-proxy": "^6.4.4",
-    "open": "^10.1.0"
+    "open": "^10.1.0",
+    "thrift": "^0.22.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

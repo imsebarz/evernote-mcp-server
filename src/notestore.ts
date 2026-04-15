@@ -1,0 +1,326 @@
+import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+
+import type {
+  ApiResponse,
+  AuthTokens,
+  CreateNotebookParams,
+  CreateTagParams,
+  Notebook,
+  Note,
+  Tag,
+  UpdateNoteParams,
+} from "./types.js";
+
+const require = createRequire(import.meta.url);
+const thrift = require("thrift");
+const NoteStore = require(
+  fileURLToPath(new URL("../vendor/evernote-thrift/NoteStore.js", import.meta.url))
+);
+
+type RawNotebook = {
+  guid?: string;
+  name?: string;
+  stack?: string;
+  defaultNotebook?: boolean;
+  serviceCreated?: number;
+  serviceUpdated?: number;
+  created?: number;
+  updated?: number;
+  sharedNotebookIds?: string[];
+};
+
+type RawTag = {
+  guid?: string;
+  name?: string;
+  parentGuid?: string;
+};
+
+type RawNote = {
+  guid?: string;
+  title?: string;
+  content?: string;
+  created?: number;
+  updated?: number;
+  deleted?: number;
+  notebookGuid?: string;
+  tagGuids?: string[];
+  attributes?: Note["attributes"];
+  resources?: Note["resources"];
+  [key: string]: unknown;
+};
+
+function noteStoreUrl(tokens: AuthTokens): URL {
+  return new URL(`https://www.evernote.com/shard/${tokens.shard}/notestore`);
+}
+
+function normalizeNumber(value: unknown): number | undefined {
+  if (value == null) return undefined;
+  if (typeof value === "number") return value;
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "object" && value && "toNumber" in value) {
+    const candidate = (value as { toNumber?: () => number }).toNumber;
+    if (typeof candidate === "function") return candidate.call(value);
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function mapNotebook(notebook: RawNotebook): Notebook {
+  return {
+    id: notebook.guid || "",
+    name: notebook.name || "",
+    stack: notebook.stack || undefined,
+    defaultNotebook: notebook.defaultNotebook,
+    created: normalizeNumber(notebook.serviceCreated ?? notebook.created),
+    updated: normalizeNumber(notebook.serviceUpdated ?? notebook.updated),
+    sharedNotebookIds: notebook.sharedNotebookIds || undefined,
+  };
+}
+
+function mapTag(tag: RawTag): Tag {
+  return {
+    id: tag.guid || "",
+    name: tag.name || "",
+    parentId: tag.parentGuid || undefined,
+  };
+}
+
+function mapNote(note: RawNote): Note {
+  return {
+    id: note.guid || "",
+    title: note.title || "",
+    content: note.content,
+    created: normalizeNumber(note.created),
+    updated: normalizeNumber(note.updated),
+    deleted: normalizeNumber(note.deleted),
+    notebookId: note.notebookGuid || undefined,
+    tagIds: note.tagGuids || undefined,
+    attributes: note.attributes || undefined,
+    resources: note.resources || undefined,
+  };
+}
+
+async function callNoteStore<T>(
+  tokens: AuthTokens,
+  method: string,
+  ...args: unknown[]
+): Promise<T> {
+  const url = noteStoreUrl(tokens);
+  const connection = thrift.createHttpConnection(url.hostname, url.port || 443, {
+    transport: thrift.TBufferedTransport,
+    protocol: thrift.TBinaryProtocol,
+    path: url.pathname,
+    headers: {
+      "User-Agent": "evernote-unofficial-api/3.0.0",
+    },
+    https: true,
+  });
+  const client = thrift.createHttpClient(NoteStore, connection) as Record<string, unknown>;
+
+  return await new Promise<T>((resolve, reject) => {
+    let settled = false;
+
+    const finish = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      try {
+        connection.removeAllListeners?.();
+        connection.end?.();
+      } catch {
+        // ignore cleanup errors
+      }
+      fn();
+    };
+
+    connection.on?.("error", (error: unknown) => {
+      finish(() => reject(error));
+    });
+
+    const handler = client[method];
+    if (typeof handler !== "function") {
+      finish(() => reject(new Error(`Unsupported NoteStore method: ${method}`)));
+      return;
+    }
+
+    try {
+      (handler as (...callArgs: unknown[]) => void).apply(client, [
+        tokens.legacyToken,
+        ...args,
+        (error: unknown, result: T) => {
+          if (error) {
+            finish(() => reject(error));
+            return;
+          }
+          finish(() => resolve(result));
+        },
+      ]);
+    } catch (error) {
+      finish(() => reject(error));
+    }
+  });
+}
+
+function errorResponse<T>(error: unknown, status = 500): ApiResponse<T> {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    ok: false,
+    status,
+    error: message,
+  };
+}
+
+export async function listNotebooksViaNoteStore(
+  tokens: AuthTokens
+): Promise<ApiResponse<Notebook[]>> {
+  try {
+    const notebooks = await callNoteStore<RawNotebook[]>(tokens, "listNotebooks");
+    return { ok: true, status: 200, data: (notebooks || []).map(mapNotebook) };
+  } catch (error) {
+    return errorResponse(error, 500);
+  }
+}
+
+export async function getNotebookViaNoteStore(
+  tokens: AuthTokens,
+  notebookId: string
+): Promise<ApiResponse<Notebook>> {
+  try {
+    const notebook = await callNoteStore<RawNotebook>(tokens, "getNotebook", notebookId);
+    return { ok: true, status: 200, data: mapNotebook(notebook) };
+  } catch (error) {
+    return errorResponse(error, 500);
+  }
+}
+
+export async function createNotebookViaNoteStore(
+  tokens: AuthTokens,
+  params: CreateNotebookParams
+): Promise<ApiResponse<Notebook>> {
+  try {
+    const notebook = await callNoteStore<RawNotebook>(tokens, "createNotebook", {
+      name: params.name,
+      stack: params.stack,
+    });
+    return { ok: true, status: 200, data: mapNotebook(notebook) };
+  } catch (error) {
+    return errorResponse(error, 500);
+  }
+}
+
+export async function deleteNotebookViaNoteStore(
+  tokens: AuthTokens,
+  notebookId: string
+): Promise<ApiResponse<void>> {
+  try {
+    await callNoteStore(tokens, "expungeNotebook", notebookId);
+    return { ok: true, status: 200, data: undefined };
+  } catch (error) {
+    return errorResponse(error, 500);
+  }
+}
+
+export async function listTagsViaNoteStore(
+  tokens: AuthTokens
+): Promise<ApiResponse<Tag[]>> {
+  try {
+    const tags = await callNoteStore<RawTag[]>(tokens, "listTags");
+    return { ok: true, status: 200, data: (tags || []).map(mapTag) };
+  } catch (error) {
+    return errorResponse(error, 500);
+  }
+}
+
+export async function createTagViaNoteStore(
+  tokens: AuthTokens,
+  params: CreateTagParams
+): Promise<ApiResponse<Tag>> {
+  try {
+    const tag = await callNoteStore<RawTag>(tokens, "createTag", {
+      name: params.name,
+      parentGuid: params.parentId,
+    });
+    return { ok: true, status: 200, data: mapTag(tag) };
+  } catch (error) {
+    return errorResponse(error, 500);
+  }
+}
+
+export async function updateTagViaNoteStore(
+  tokens: AuthTokens,
+  tagId: string,
+  params: { name?: string; parentId?: string }
+): Promise<ApiResponse<Tag>> {
+  try {
+    const existingTags = await callNoteStore<RawTag[]>(tokens, "listTags");
+    const current = (existingTags || []).find((tag) => tag.guid === tagId);
+    if (!current) {
+      return { ok: false, status: 404, error: `Tag not found: ${tagId}` };
+    }
+
+    const updatedTag: RawTag = {
+      ...current,
+      ...(params.name !== undefined ? { name: params.name } : {}),
+      ...(params.parentId !== undefined ? { parentGuid: params.parentId } : {}),
+    };
+
+    await callNoteStore(tokens, "updateTag", updatedTag);
+    const refreshedTags = await callNoteStore<RawTag[]>(tokens, "listTags");
+    const refreshed = (refreshedTags || []).find((tag) => tag.guid === tagId) || updatedTag;
+    return { ok: true, status: 200, data: mapTag(refreshed) };
+  } catch (error) {
+    return errorResponse(error, 500);
+  }
+}
+
+export async function updateNoteViaNoteStore(
+  tokens: AuthTokens,
+  params: UpdateNoteParams
+): Promise<ApiResponse<Note>> {
+  try {
+    const current = await callNoteStore<RawNote>(
+      tokens,
+      "getNote",
+      params.id,
+      true,
+      false,
+      false,
+      false
+    );
+
+    const updatedNote: RawNote = {
+      ...current,
+      guid: params.id,
+      ...(params.title !== undefined ? { title: params.title } : {}),
+      ...(params.content !== undefined ? { content: params.content } : {}),
+      ...(params.tagIds !== undefined ? { tagGuids: params.tagIds } : {}),
+      ...(params.attributes !== undefined ? { attributes: params.attributes } : {}),
+    };
+
+    await callNoteStore(tokens, "updateNote", updatedNote);
+    const refreshed = await callNoteStore<RawNote>(
+      tokens,
+      "getNote",
+      params.id,
+      true,
+      false,
+      false,
+      false
+    );
+    return { ok: true, status: 200, data: mapNote(refreshed) };
+  } catch (error) {
+    return errorResponse(error, 500);
+  }
+}
+
+export async function deleteNoteViaNoteStore(
+  tokens: AuthTokens,
+  noteId: string
+): Promise<ApiResponse<void>> {
+  try {
+    await callNoteStore(tokens, "deleteNote", noteId);
+    return { ok: true, status: 200, data: undefined };
+  } catch (error) {
+    return errorResponse(error, 500);
+  }
+}

@@ -25,6 +25,17 @@ import type {
   SyncState,
 } from "./types.js";
 import { refreshTokens, saveTokens } from "./auth.js";
+import {
+  createNotebookViaNoteStore,
+  createTagViaNoteStore,
+  deleteNoteViaNoteStore,
+  deleteNotebookViaNoteStore,
+  getNotebookViaNoteStore,
+  listNotebooksViaNoteStore,
+  listTagsViaNoteStore,
+  updateNoteViaNoteStore,
+  updateTagViaNoteStore,
+} from "./notestore.js";
 
 // --- Constants ---
 
@@ -156,12 +167,12 @@ export class EvernoteClient {
 
   /** List all notebooks */
   async listNotebooks(): Promise<ApiResponse<Notebook[]>> {
-    return this.request<Notebook[]>("GET", "/v1/notebooks");
+    return listNotebooksViaNoteStore(this.tokens);
   }
 
   /** List all tags */
   async listTags(): Promise<ApiResponse<Tag[]>> {
-    return this.request<Tag[]>("GET", "/v1/tags");
+    return listTagsViaNoteStore(this.tokens);
   }
 
   /** List notes (uses search with wildcard) */
@@ -186,10 +197,7 @@ export class EvernoteClient {
 
   /** Get a single notebook by ID */
   async getNotebook(notebookId: string): Promise<ApiResponse<Notebook>> {
-    return this.request<Notebook>(
-      "GET",
-      `/v1/notebooks/${encodeURIComponent(notebookId)}`
-    );
+    return getNotebookViaNoteStore(this.tokens, notebookId);
   }
 
   // ─── Notes ───────────────────────────────────────────────
@@ -216,7 +224,9 @@ export class EvernoteClient {
       enmlContent: params.content,
       tagIds: params.tagIds || [],
       fallbackToDefaultNotebook: !params.notebookId,
-      parent: params.notebookId ? { id: params.notebookId } : undefined,
+      parent: params.notebookId
+        ? { id: params.notebookId, type: "NOTEBOOK" }
+        : undefined,
       attributes: params.attributes || {},
     });
   }
@@ -227,21 +237,7 @@ export class EvernoteClient {
    * doesn't expose a direct update — updates go through Conduit/NSync.
    */
   async updateNote(params: UpdateNoteParams): Promise<ApiResponse<Note>> {
-    // For note updates, we use the NSync command service
-    return this.request<Note>("POST", "/command", {
-      operations: [
-        {
-          type: "NoteUpdate",
-          noteId: params.id,
-          ...(params.title !== undefined && { title: params.title }),
-          ...(params.content !== undefined && { enmlContent: params.content }),
-          ...(params.tagIds !== undefined && { tagIds: params.tagIds }),
-          ...(params.attributes !== undefined && {
-            attributes: params.attributes,
-          }),
-        },
-      ],
-    });
+    return updateNoteViaNoteStore(this.tokens, params);
   }
 
   /**
@@ -249,14 +245,7 @@ export class EvernoteClient {
    * Uses the NSync command service.
    */
   async deleteNote(noteId: string): Promise<ApiResponse<void>> {
-    return this.request<void>("POST", "/command", {
-      operations: [
-        {
-          type: "NoteDelete",
-          noteId,
-        },
-      ],
-    });
+    return deleteNoteViaNoteStore(this.tokens, noteId);
   }
 
   /** Request access to a shared note */
@@ -288,23 +277,12 @@ export class EvernoteClient {
   async createNotebook(
     params: CreateNotebookParams
   ): Promise<ApiResponse<Notebook>> {
-    return this.request<Notebook>("POST", "/command", {
-      operations: [
-        {
-          type: "NotebookCreate",
-          name: params.name,
-          stack: params.stack,
-        },
-      ],
-    });
+    return createNotebookViaNoteStore(this.tokens, params);
   }
 
   /** Delete a notebook by ID */
   async deleteNotebook(notebookId: string): Promise<ApiResponse<void>> {
-    return this.request<void>(
-      "DELETE",
-      `/v1/notebooks/${encodeURIComponent(notebookId)}`
-    );
+    return deleteNotebookViaNoteStore(this.tokens, notebookId);
   }
 
   // ─── Tags ────────────────────────────────────────────────
@@ -314,15 +292,7 @@ export class EvernoteClient {
    * Uses the NSync command service.
    */
   async createTag(params: CreateTagParams): Promise<ApiResponse<Tag>> {
-    return this.request<Tag>("POST", "/command", {
-      operations: [
-        {
-          type: "TagCreate",
-          name: params.name,
-          parentId: params.parentId,
-        },
-      ],
-    });
+    return createTagViaNoteStore(this.tokens, params);
   }
 
   /** Update a tag's name or parent */
@@ -330,11 +300,7 @@ export class EvernoteClient {
     tagId: string,
     params: Partial<CreateTagParams>
   ): Promise<ApiResponse<Tag>> {
-    return this.request<Tag>(
-      "PATCH",
-      `/v1/tags/${encodeURIComponent(tagId)}`,
-      params
-    );
+    return updateTagViaNoteStore(this.tokens, tagId, params);
   }
 
   // ─── Search ──────────────────────────────────────────────

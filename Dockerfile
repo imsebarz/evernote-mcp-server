@@ -7,6 +7,7 @@ RUN npm ci
 
 COPY tsconfig.json ./
 COPY src ./src
+COPY vendor ./vendor
 RUN npm run build
 
 # Runtime stage
@@ -18,6 +19,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/vendor ./vendor
 COPY README.md mcp.json .
 
 # Tokens path (mount a volume and point here)
