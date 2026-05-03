@@ -81,7 +81,7 @@ export async function createNote(
 export async function updateNote(
   client: EvernoteClient,
   noteId: string,
-  args: { title?: string; content?: string; format?: string; tagIds?: string[] }
+  args: { title?: string; content?: string; format?: string; notebookId?: string; tagIds?: string[] }
 ): Promise<HandlerResult> {
   return fromApi(
     await client.updateNote({
@@ -90,6 +90,7 @@ export async function updateNote(
       ...(args.content !== undefined && {
         content: formatContent(args.content, args.format),
       }),
+      ...(args.notebookId !== undefined && { notebookId: args.notebookId }),
       ...(args.tagIds !== undefined && { tagIds: args.tagIds }),
     })
   );
@@ -115,6 +116,39 @@ export async function scheduleReminder(
   reminderTime: number
 ): Promise<HandlerResult> {
   return fromApi(await client.scheduleReminder(noteId, reminderTime));
+}
+
+// ─── Attachments ────────────────────────────────────────────
+
+export async function listAttachments(
+  client: EvernoteClient,
+  noteId: string
+): Promise<HandlerResult> {
+  return fromApi(await client.listAttachments(noteId));
+}
+
+export async function addAttachment(
+  client: EvernoteClient,
+  noteId: string,
+  args: { filename: string; mime?: string; data: string; dataEncoding?: "base64" | "utf8" }
+): Promise<HandlerResult> {
+  return fromApi(
+    await client.addAttachment({
+      noteId,
+      filename: args.filename,
+      mime: args.mime,
+      data: args.data,
+      dataEncoding: args.dataEncoding || "base64",
+    })
+  );
+}
+
+export async function getAttachment(
+  client: EvernoteClient,
+  resourceId: string,
+  args: { includeData?: boolean } = {}
+): Promise<HandlerResult> {
+  return fromApi(await client.getAttachment(resourceId, args));
 }
 
 // ─── Notebooks ──────────────────────────────────────────────
@@ -233,6 +267,24 @@ export async function aiSuggestTitle(
   noteGuid: string
 ): Promise<HandlerResult> {
   return fromApi(await client.aiSuggestTitle(noteGuid));
+}
+
+// ─── OCR / Recognition ─────────────────────────────────────
+
+export async function getNoteOcrContents(
+  client: EvernoteClient,
+  noteId: string,
+  args: { includeSearchText?: boolean } = {}
+): Promise<HandlerResult> {
+  return fromApi(await client.getNoteOcrContents(noteId, args));
+}
+
+export async function getResourceOcrContents(
+  client: EvernoteClient,
+  resourceId: string,
+  args: { noteId?: string } = {}
+): Promise<HandlerResult> {
+  return fromApi(await client.getResourceOcrContents(resourceId, args));
 }
 
 // ─── Shortcuts ──────────────────────────────────────────────

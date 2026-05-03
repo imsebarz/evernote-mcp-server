@@ -45,7 +45,7 @@ const tools: Tool[] = [
   },
   {
     name: "update_note",
-    description: "Update an existing note's title, content, or tags.",
+    description: "Update an existing note's title, content, notebook, or tags.",
     inputSchema: {
       type: "object" as const,
       properties: {
@@ -53,6 +53,7 @@ const tools: Tool[] = [
         title: { type: "string", description: "New title (optional)" },
         content: { type: "string", description: "New content (optional)" },
         format: { type: "string", enum: ["text", "markdown", "enml"], description: "Content format", default: "text" },
+        notebookId: { type: "string", description: "Destination notebook ID (optional)" },
         tagIds: { type: "array", items: { type: "string" }, description: "New tag IDs (replaces existing)" },
       },
       required: ["noteId"],
@@ -95,6 +96,53 @@ const tools: Tool[] = [
         reminderTime: { type: "number", description: "Reminder time as Unix timestamp in milliseconds" },
       },
       required: ["noteId", "reminderTime"],
+    },
+  },
+  {
+    name: "list_attachments",
+    description: "List attachments/resources on a note, including file name, MIME type, size, and hash.",
+    inputSchema: {
+      type: "object" as const,
+      properties: { noteId: { type: "string", description: "ID of the note" } },
+      required: ["noteId"],
+    },
+  },
+  {
+    name: "add_attachment",
+    description:
+      "Add a PDF, Office document, image, or other binary attachment to an existing note. " +
+      "Data should usually be a base64 string.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        noteId: { type: "string", description: "ID of the note" },
+        filename: { type: "string", description: "Attachment filename, used for display and MIME inference" },
+        mime: { type: "string", description: "MIME type. If omitted, inferred from filename for common document types." },
+        data: { type: "string", description: "Attachment data as base64 by default" },
+        dataEncoding: {
+          type: "string",
+          enum: ["base64", "utf8"],
+          description: "How to decode data. Defaults to base64.",
+          default: "base64",
+        },
+      },
+      required: ["noteId", "filename", "data"],
+    },
+  },
+  {
+    name: "get_attachment",
+    description: "Retrieve attachment metadata and optionally base64-encoded binary data.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        resourceId: { type: "string", description: "ID of the attachment/resource" },
+        includeData: {
+          type: "boolean",
+          description: "Include base64 attachment data. Defaults to true.",
+          default: true,
+        },
+      },
+      required: ["resourceId"],
     },
   },
 
@@ -245,6 +293,40 @@ const tools: Tool[] = [
     },
   },
 
+  // --- OCR / Recognition ---
+  {
+    name: "get_note_ocr",
+    description:
+      "Get OCR recognition content and search text for resources attached to a note.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        noteId: { type: "string", description: "ID of the note" },
+        includeSearchText: {
+          type: "boolean",
+          description: "Include Evernote's extracted resource search text",
+          default: true,
+        },
+      },
+      required: ["noteId"],
+    },
+  },
+  {
+    name: "get_resource_ocr",
+    description: "Get OCR recognition content and search text for a single resource.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        resourceId: { type: "string", description: "ID of the resource" },
+        noteId: {
+          type: "string",
+          description: "Parent note ID. If omitted, the server looks it up via NoteStore.",
+        },
+      },
+      required: ["resourceId"],
+    },
+  },
+
   // --- User & Account ---
   {
     name: "get_user",
@@ -342,6 +424,14 @@ async function handleToolCall(
       result = await handlers.exportNotes(client, args.noteIds as string[]); break;
     case "schedule_reminder":
       result = await handlers.scheduleReminder(client, args.noteId as string, args.reminderTime as number); break;
+    case "list_attachments":
+      result = await handlers.listAttachments(client, args.noteId as string); break;
+    case "add_attachment":
+      result = await handlers.addAttachment(client, args.noteId as string, args as any); break; // eslint-disable-line @typescript-eslint/no-explicit-any
+    case "get_attachment":
+      result = await handlers.getAttachment(client, args.resourceId as string, {
+        includeData: args.includeData as boolean | undefined,
+      }); break;
 
     // Notebooks
     case "list_notebooks":
@@ -378,6 +468,16 @@ async function handleToolCall(
       result = await handlers.aiSuggestTags(client, args.noteGuid as string); break;
     case "ai_suggest_title":
       result = await handlers.aiSuggestTitle(client, args.noteGuid as string); break;
+
+    // OCR
+    case "get_note_ocr":
+      result = await handlers.getNoteOcrContents(client, args.noteId as string, {
+        includeSearchText: args.includeSearchText as boolean | undefined,
+      }); break;
+    case "get_resource_ocr":
+      result = await handlers.getResourceOcrContents(client, args.resourceId as string, {
+        noteId: args.noteId as string | undefined,
+      }); break;
 
     // User
     case "get_user":

@@ -7,6 +7,8 @@ import type {
   AuthTokens,
   EvernoteHeaders,
   ApiResponse,
+  Attachment,
+  AttachmentData,
   Note,
   CreateNoteParams,
   UpdateNoteParams,
@@ -23,14 +25,25 @@ import type {
   AIRephraseParams,
   CreateAttachmentParams,
   SyncState,
+  NoteOcrContents,
+  NoteResourceOcr,
+  OcrRecognition,
+  ResourceOcrContents,
 } from "./types.js";
 import { refreshTokens, saveTokens } from "./auth.js";
+import { selectGetNoteBackend } from "./evernote-version.js";
 import {
+  addAttachmentViaNoteStore,
   createNotebookViaNoteStore,
   createTagViaNoteStore,
   deleteNoteViaNoteStore,
   deleteNotebookViaNoteStore,
+  getAttachmentViaNoteStore,
+  getNoteViaNoteStore,
   getNotebookViaNoteStore,
+  getResourceMetadataViaNoteStore,
+  listAttachmentsViaNoteStore,
+  listNotesViaNoteStore,
   listNotebooksViaNoteStore,
   listTagsViaNoteStore,
   updateNoteViaNoteStore,
@@ -40,9 +53,129 @@ import {
 // --- Constants ---
 
 const API_GATEWAY = "https://api.evernote.com";
+const QUERY_SERVICE = "https://api.evernote.com/query";
 const MONOLITH = "https://www.evernote.com";
 const FEATURE_VERSION = "4";
 const CONDUIT_VERSION = "2.111.0";
+
+const NOTE_RECOGNITIONS_QUERY = `
+query NoteRecognitions($id: String!) {
+  note(note: $id) {
+    id
+    resources {
+      id
+      recognition {
+        content
+        size
+        hash
+      }
+    }
+  }
+}`;
+
+const NOTE_RECOGNITIONS_AND_SEARCH_QUERY = `
+query NoteRecognitionsAndSearch($id: String!) {
+  note(note: $id) {
+    id
+    resources {
+      id
+      data {
+        hash
+      }
+      recognition {
+        content
+        size
+        hash
+      }
+      searchText
+    }
+  }
+}`;
+
+const RESOURCE_RECOGNITION_AND_SEARCH_QUERY = `
+query ResourceRecognitions($id: String!) {
+  resource(resource: $id) {
+    recognition {
+      content
+    }
+    searchText
+  }
+}`;
+
+type GraphQLError = {
+  message?: string;
+};
+
+type GraphQLResponse<T> = {
+  data?: T;
+  errors?: GraphQLError[];
+};
+
+type QuasarEntityRef = {
+  type: "Note";
+  id: string;
+};
+
+type QuasarEntityMetadata = {
+  entityID: string;
+  ownerID: number;
+  shardID: number;
+  generatedID: null;
+  parentRef: QuasarEntityRef | null;
+};
+
+type QuasarRecognition = {
+  content?: string | null;
+  size?: number | null;
+  hash?: string | null;
+};
+
+type QuasarResourceOcr = {
+  id?: string | null;
+  data?: {
+    hash?: string | null;
+  } | null;
+  recognition?: QuasarRecognition | null;
+  searchText?: string | null;
+};
+
+type QuasarNoteOcrData = {
+  note?: {
+    id?: string | null;
+    resources?: QuasarResourceOcr[] | null;
+  } | null;
+};
+
+type QuasarResourceOcrData = {
+  resource?: {
+    recognition?: QuasarRecognition | null;
+    searchText?: string | null;
+  } | null;
+};
+
+function normalizeRecognition(
+  recognition: QuasarRecognition | null | undefined
+): OcrRecognition | undefined {
+  if (!recognition) return undefined;
+
+  const normalized: OcrRecognition = {};
+  if (recognition.content != null) normalized.content = recognition.content;
+  if (recognition.size != null) normalized.size = recognition.size;
+  if (recognition.hash != null) normalized.hash = recognition.hash;
+
+  return Object.keys(normalized).length ? normalized : undefined;
+}
+
+function mapQuasarResourceOcr(resource: QuasarResourceOcr): NoteResourceOcr {
+  const mapped: NoteResourceOcr = { id: resource.id || "" };
+  const recognition = normalizeRecognition(resource.recognition);
+
+  if (resource.data?.hash) mapped.dataHash = resource.data.hash;
+  if (recognition) mapped.recognition = recognition;
+  if (resource.searchText) mapped.searchText = resource.searchText;
+
+  return mapped;
+}
 
 // --- Client ---
 
@@ -146,6 +279,80 @@ export class EvernoteClient {
     }
   }
 
+  private async queryQuasar<T>(
+    operationName: string,
+    query: string,
+    variables: Record<string, unknown>,
+    entityMetadata: Record<string, QuasarEntityMetadata[]> = {}
+  ): Promise<ApiResponse<T>> {
+    await this.ensureValidToken();
+
+    try {
+      const response = await fetch(`${QUERY_SERVICE}/v1/graphql`, {
+        method: "POST",
+        headers: {
+          ...this.buildHeaders(),
+          Metadata: JSON.stringify({
+            id: crypto.randomUUID(),
+            entityMetadata,
+          }),
+        },
+        body: JSON.stringify({
+          operationName: null,
+          query,
+          variables,
+        }),
+      });
+
+      const contentType = response.headers.get("content-type") || "";
+      const data = contentType.includes("application/json")
+        ? ((await response.json()) as GraphQLResponse<T>)
+        : undefined;
+
+      if (!response.ok) {
+        const errorText = data
+          ? JSON.stringify(data)
+          : await response.text();
+        return {
+          ok: false,
+          status: response.status,
+          error: `${response.status} ${response.statusText}: ${errorText}`,
+        };
+      }
+
+      if (data?.errors?.length) {
+        return {
+          ok: false,
+          status: response.status,
+          error: data.errors
+            .map((error) => error.message || "GraphQL error")
+            .join("; "),
+        };
+      }
+
+      return { ok: true, status: response.status, data: data?.data as T };
+    } catch (err) {
+      return {
+        ok: false,
+        status: 0,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  private buildEntityMetadata(
+    entityId: string,
+    parentRef: QuasarEntityRef | null
+  ): QuasarEntityMetadata {
+    return {
+      entityID: entityId,
+      ownerID: Number(this.tokens.userId),
+      shardID: Number(this.tokens.shard.replace(/^s/, "")),
+      generatedID: null,
+      parentRef,
+    };
+  }
+
   // ─── User ────────────────────────────────────────────────
 
   /** Get the currently authenticated user's profile */
@@ -175,20 +382,19 @@ export class EvernoteClient {
     return listTagsViaNoteStore(this.tokens);
   }
 
-  /** List notes (uses search with wildcard) */
+  /** List recently updated notes with metadata. */
   async listNotes(maxResults: number = 50): Promise<ApiResponse<SearchResult[]>> {
-    return this.request<SearchResult[]>("GET", "/v1/search/semantic", undefined, {
-      naturalLanguageQuery: "*",
-      maxResults,
-      clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      keywordSearchFallback: true,
-    });
+    return listNotesViaNoteStore(this.tokens, maxResults);
   }
 
   // ─── Get by ID ──────────────────────────────────────────
 
   /** Get a single note by ID (full content) */
   async getNote(noteId: string): Promise<ApiResponse<Note>> {
+    if (selectGetNoteBackend() === "notestore") {
+      return getNoteViaNoteStore(this.tokens, noteId);
+    }
+
     return this.request<Note>(
       "GET",
       `/v1/notes/${encodeURIComponent(noteId)}`
@@ -383,6 +589,31 @@ export class EvernoteClient {
     return this.request("POST", "/v1/attachments/create-upload-url", params);
   }
 
+  /** List metadata for resources/attachments attached to a note. */
+  async listAttachments(noteId: string): Promise<ApiResponse<Attachment[]>> {
+    return listAttachmentsViaNoteStore(this.tokens, noteId);
+  }
+
+  /**
+   * Add a binary attachment to an existing note.
+   * Accepts Buffer/Uint8Array data, or a base64 string for REST/MCP callers.
+   */
+  async addAttachment(
+    params: CreateAttachmentParams
+  ): Promise<ApiResponse<Attachment>> {
+    return addAttachmentViaNoteStore(this.tokens, params);
+  }
+
+  /**
+   * Retrieve an attachment's metadata and, by default, base64-encoded binary body.
+   */
+  async getAttachment(
+    resourceId: string,
+    options: { includeData?: boolean } = {}
+  ): Promise<ApiResponse<AttachmentData>> {
+    return getAttachmentViaNoteStore(this.tokens, resourceId, options);
+  }
+
   // ─── Workspaces (Spaces) ─────────────────────────────────
 
   /** Delete a workspace/space */
@@ -449,6 +680,131 @@ export class EvernoteClient {
   /** OCR a business card image */
   async ocrBusinessCard(imageData: string): Promise<ApiResponse<unknown>> {
     return this.request("POST", "/v1/ocr/business-card", { image: imageData });
+  }
+
+  /**
+   * Get OCR/recognition content for every resource attached to a note.
+   * Uses the Quasar Query GraphQL service used by newer Evernote clients.
+   */
+  async getNoteOcrContents(
+    noteId: string,
+    options: { includeSearchText?: boolean } = {}
+  ): Promise<ApiResponse<NoteOcrContents>> {
+    const includeSearchText = options.includeSearchText ?? true;
+    const response = await this.queryQuasar<QuasarNoteOcrData>(
+      includeSearchText ? "NoteRecognitionsAndSearch" : "NoteRecognitions",
+      includeSearchText
+        ? NOTE_RECOGNITIONS_AND_SEARCH_QUERY
+        : NOTE_RECOGNITIONS_QUERY,
+      { id: noteId },
+      {
+        Note: [
+          this.buildEntityMetadata(noteId, {
+            type: "Note",
+            id: noteId,
+          }),
+        ],
+      }
+    );
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        error: response.error,
+      };
+    }
+    if (!response.data?.note) {
+      return {
+        ok: false,
+        status: 404,
+        error: `Note OCR contents not found: ${noteId}`,
+      };
+    }
+
+    return {
+      ok: true,
+      status: response.status,
+      data: {
+        noteId: response.data.note.id || noteId,
+        resources: (response.data.note.resources || []).map(mapQuasarResourceOcr),
+      },
+    };
+  }
+
+  /**
+   * Get OCR/recognition content for a single resource/attachment.
+   * Uses the Quasar Query GraphQL service used by newer Evernote clients.
+   */
+  async getResourceOcrContents(
+    resourceId: string,
+    options: { noteId?: string } = {}
+  ): Promise<ApiResponse<ResourceOcrContents>> {
+    let noteId = options.noteId;
+    if (!noteId) {
+      const resource = await getResourceMetadataViaNoteStore(this.tokens, resourceId);
+      if (!resource.ok) {
+        return {
+          ok: false,
+          status: resource.status,
+          error: resource.error,
+        };
+      }
+      noteId = resource.data?.noteId;
+    }
+
+    if (!noteId) {
+      return {
+        ok: false,
+        status: 400,
+        error: `Parent note ID is required for resource OCR: ${resourceId}`,
+      };
+    }
+
+    const response = await this.queryQuasar<QuasarResourceOcrData>(
+      "ResourceRecognitions",
+      RESOURCE_RECOGNITION_AND_SEARCH_QUERY,
+      { id: resourceId },
+      {
+        Resource: [
+          this.buildEntityMetadata(resourceId, {
+            type: "Note",
+            id: noteId,
+          }),
+        ],
+      }
+    );
+
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        error: response.error,
+      };
+    }
+    if (!response.data?.resource) {
+      return {
+        ok: false,
+        status: 404,
+        error: `Resource OCR contents not found: ${resourceId}`,
+      };
+    }
+
+    const data: ResourceOcrContents = {
+      resourceId,
+      noteId,
+    };
+    const recognition = normalizeRecognition(response.data.resource.recognition);
+    if (recognition) data.recognition = recognition;
+    if (response.data.resource.searchText) {
+      data.searchText = response.data.resource.searchText;
+    }
+
+    return {
+      ok: true,
+      status: response.status,
+      data,
+    };
   }
 
   // ─── Notes Import/Export ─────────────────────────────────
