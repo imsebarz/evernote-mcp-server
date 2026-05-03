@@ -7,7 +7,7 @@ This is a TypeScript Evernote client and MCP server. Source files live in `src/`
 ## Build, Test, and Development Commands
 
 - `npm install`: install dependencies.
-- `./setup-repo.sh`: install dependencies and initialize the optional private submodule when access is available.
+- `./setup-repo.sh`: install dependencies for a local checkout.
 - `npm run build`: compile TypeScript with strict settings into `dist/`.
 - `npm test`: run the TypeScript build and Node test suite.
 - `npm run auth` or `npm run mcp:auth`: run the one-time Evernote OAuth flow.
@@ -21,7 +21,7 @@ Use ES modules and explicit `.js` extensions in TypeScript imports, matching the
 
 ## Testing Guidelines
 
-For now, validate changes with `npm run build`. For behavior that touches Evernote auth or live API calls, use `src/test-flow.ts` or the relevant example flow manually, and document what account state or token file was used. Name any future tests after the module or behavior under test, for example `enml.test.ts` or `mcp-server.tools.test.ts`.
+Validate changes with `npm test`. For behavior that touches Evernote auth or live API calls, use `src/test-flow.ts` or the relevant example flow manually, and document what account state or token file was used. Name future tests after the module or behavior under test, for example `enml.test.ts` or `mcp-server.tools.test.ts`.
 
 ## Commit & Pull Request Guidelines
 
@@ -31,8 +31,8 @@ Recent history uses short imperative subjects, sometimes with Conventional Commi
 
 Never commit token files. OAuth tokens default to `~/.evernote-api/tokens.json`; production examples use `EVERNOTE_TOKEN_PATH`. Keep secrets in environment variables or mounted volumes, not source files.
 
-## Private ScanSnap Data
+## Private Local Data
 
-Private ScanSnap classification files live in the `private/` submodule, which points to the private `jonmlevine/evernote-mcp-private` repository. In authorized checkouts, run `./setup-repo.sh` or `git submodule update --init --recursive private` before ScanSnap work; public users can leave the submodule uninitialized. Keep ScanSnap CSV, Markdown, JSON, and pattern files inside `private/` only, not in the public repository root.
+`private/` is an ignored local-only workspace created by `./setup-repo.sh`. Keep account-specific exports, OCR review files, ScanSnap classification files, and other private data there. Do not add `private/` as a public submodule or copy private files to the repository root.
 
-When updating ScanSnap title, tag, or notebook suggestions, read `private/SCANSNAP_CLASSIFICATION_PATTERNS.md` first if the submodule is available. Treat user-corrected and user-confirmed CSV rows as ground truth, use backend OCR before fallbacks, and do not modify Evernote notes unless explicitly requested.
+For ScanSnap classification work, read `private/SCANSNAP_CLASSIFICATION_PATTERNS.md` first if it exists. Treat user-corrected and user-confirmed CSV rows as ground truth, use backend OCR before fallbacks, and do not modify Evernote notes unless explicitly requested.

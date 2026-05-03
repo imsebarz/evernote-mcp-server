@@ -10,7 +10,4 @@ dist/
 .evernote-api/
 tokens.json
 .zed/**
-/scansnap-evernote-update-results.json
-/scansnap-title-tag-suggestions.csv
-/scansnap-title-tag-suggestions.md
-/SCANSNAP_CLASSIFICATION_PATTERNS.md
+/private/

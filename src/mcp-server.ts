@@ -10,6 +10,7 @@
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { createRequire } from "node:module";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -21,6 +22,10 @@ import { loadTokens, refreshTokens, saveTokens } from "./auth.js";
 import type { AuthTokens } from "./types.js";
 import * as handlers from "./route-handlers.js";
 import type { HandlerResult } from "./route-handlers.js";
+
+const require = createRequire(import.meta.url);
+const packageJson = require("../package.json") as { version?: string };
+const SERVER_VERSION = packageJson.version || "0.0.0";
 
 // ─── Tool Definitions ──────────────────────────────────────
 
@@ -533,7 +538,7 @@ async function main() {
   const client = new EvernoteClient(activeTokens, tokenPath);
 
   const server = new Server(
-    { name: "evernote-mcp-server", version: "3.0.0" },
+    { name: "evernote-mcp-server", version: SERVER_VERSION },
     { capabilities: { tools: {} } }
   );
 

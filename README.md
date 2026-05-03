@@ -9,8 +9,8 @@ This public repository is licensed under the MIT License. See [LICENSE](LICENSE)
 ## MCP Server — Quick Start
 
 ```bash
-# 1. Install and initialize optional private data
-./setup-repo.sh
+# 1. Install
+npm install
 
 # 2. Authenticate (opens browser — only needed once)
 npx tsx src/mcp-auth.ts
@@ -95,41 +95,22 @@ Use the absolute path to this repository for `cwd` if you start Copilot from ano
 
 ## Private Directory
 
-`private/` is a Git submodule backed by the private `jonmlevine/evernote-mcp-private` repository. It stores private ScanSnap classification artifacts and is optional for public users; the MCP server can build and run without it.
+`private/` is a local-only workspace for account-specific exports, OCR review files, and other data that should not be committed to the public repository. It is ignored by Git and excluded from npm packages.
 
-Authorized users can initialize it during setup:
-
-```bash
-./setup-repo.sh
-```
-
-Or initialize only the submodule:
+`./setup-repo.sh` creates the directory automatically. To create it manually:
 
 ```bash
-git submodule update --init --recursive private
+mkdir -p private
 ```
 
-Fresh authorized clones can include it immediately:
-
-```bash
-git clone --recurse-submodules https://github.com/jonmlevine/evernote-mcp-server.git
-```
-
-If the submodule checkout is denied, authenticate GitHub CLI with an account that can read the private repository, then retry:
-
-```bash
-gh auth login
-git submodule update --init --recursive private
-```
-
-Private ScanSnap files belong under `private/`:
+Keep private ScanSnap and review artifacts under this directory, for example:
 
 - `private/SCANSNAP_CLASSIFICATION_PATTERNS.md`
 - `private/scansnap-title-tag-suggestions.csv`
 - `private/scansnap-title-tag-suggestions.md`
 - `private/scansnap-evernote-update-results.json`
 
-Do not copy these files to the public repository root. Root-level copies are ignored by `.gitignore` to reduce accidental commits.
+Do not copy these files to the repository root. If they need version control, use a separate private repository or a nested Git checkout inside `private/`; do not add it as a submodule in the public repo.
 
 ### 31 MCP Tools Available
 
