@@ -7,13 +7,13 @@ This is a TypeScript Evernote client and MCP server. Source files live in `src/`
 ## Build, Test, and Development Commands
 
 - `npm install`: install dependencies.
+- `./setup-repo.sh`: install dependencies and initialize the optional private submodule when access is available.
 - `npm run build`: compile TypeScript with strict settings into `dist/`.
+- `npm test`: run the TypeScript build and Node test suite.
 - `npm run auth` or `npm run mcp:auth`: run the one-time Evernote OAuth flow.
 - `npm run mcp`: start the local stdio MCP server from TypeScript.
 - `npm run dev`: run the TypeScript API example.
 - `npm run proxy`, `npm run proxy:sse`, `npm run proxy:stream`: run the built MCP proxy after `npm run build`.
-
-There is currently no `npm test` script.
 
 ## Coding Style & Naming Conventions
 
@@ -33,5 +33,6 @@ Never commit token files. OAuth tokens default to `~/.evernote-api/tokens.json`;
 
 ## Private ScanSnap Data
 
-Private ScanSnap classification files live in the `private/` submodule, which points to the private `jonmlevine/evernote-mcp-private` repository. When updating ScanSnap title, tag, or notebook suggestions, read `private/SCANSNAP_CLASSIFICATION_PATTERNS.md` first if the submodule is available. Treat user-corrected and user-confirmed CSV rows as ground truth, use backend OCR before fallbacks, and do not modify Evernote notes unless explicitly requested.
+Private ScanSnap classification files live in the `private/` submodule, which points to the private `jonmlevine/evernote-mcp-private` repository. In authorized checkouts, run `./setup-repo.sh` or `git submodule update --init --recursive private` before ScanSnap work; public users can leave the submodule uninitialized. Keep ScanSnap CSV, Markdown, JSON, and pattern files inside `private/` only, not in the public repository root.
 
+When updating ScanSnap title, tag, or notebook suggestions, read `private/SCANSNAP_CLASSIFICATION_PATTERNS.md` first if the submodule is available. Treat user-corrected and user-confirmed CSV rows as ground truth, use backend OCR before fallbacks, and do not modify Evernote notes unless explicitly requested.

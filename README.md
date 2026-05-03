@@ -2,11 +2,15 @@
 
 Unofficial Evernote API client & MCP server, reverse-engineered from Evernote's web and desktop clients. Full CRUD, attachments, semantic search, AI features, resource OCR, and 31 MCP tools for Claude Desktop / Claude Code.
 
+## License
+
+This public repository is licensed under the MIT License. See [LICENSE](LICENSE).
+
 ## MCP Server — Quick Start
 
 ```bash
-# 1. Install
-npm install
+# 1. Install and initialize optional private data
+./setup-repo.sh
 
 # 2. Authenticate (opens browser — only needed once)
 npx tsx src/mcp-auth.ts
@@ -88,6 +92,44 @@ Or add this persistent entry to `~/.copilot/mcp-config.json`:
 ```
 
 Use the absolute path to this repository for `cwd` if you start Copilot from another directory.
+
+## Private Directory
+
+`private/` is a Git submodule backed by the private `jonmlevine/evernote-mcp-private` repository. It stores private ScanSnap classification artifacts and is optional for public users; the MCP server can build and run without it.
+
+Authorized users can initialize it during setup:
+
+```bash
+./setup-repo.sh
+```
+
+Or initialize only the submodule:
+
+```bash
+git submodule update --init --recursive private
+```
+
+Fresh authorized clones can include it immediately:
+
+```bash
+git clone --recurse-submodules https://github.com/jonmlevine/evernote-mcp-server.git
+```
+
+If the submodule checkout is denied, authenticate GitHub CLI with an account that can read the private repository, then retry:
+
+```bash
+gh auth login
+git submodule update --init --recursive private
+```
+
+Private ScanSnap files belong under `private/`:
+
+- `private/SCANSNAP_CLASSIFICATION_PATTERNS.md`
+- `private/scansnap-title-tag-suggestions.csv`
+- `private/scansnap-title-tag-suggestions.md`
+- `private/scansnap-evernote-update-results.json`
+
+Do not copy these files to the public repository root. Root-level copies are ignored by `.gitignore` to reduce accidental commits.
 
 ### 31 MCP Tools Available
 

@@ -1,30 +1,53 @@
-#!/bin/bash
-# Quick setup: init git, commit, and push to GitHub
-# Run this from the evernote-api folder on your machine
+#!/usr/bin/env bash
+# Local setup helper for evernote-mcp-server.
 
-set -e
+set -euo pipefail
 
-echo "Setting up evernote-mcp-server repo..."
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT_DIR"
 
-# Remove old .git if it exists (leftover from sandbox)
-rm -rf .git
+echo "Setting up evernote-mcp-server..."
 
-git init
-git branch -M main
-git add .gitignore README.md package.json package-lock.json tsconfig.json mcp.json src/
-git commit -m "Initial release: Evernote MCP Server v2.0.0
-
-Reverse-engineered unofficial Evernote API client with:
-- OAuth2 PKCE authentication (same flow as official web client)
-- Full REST API client with 30+ methods
-- 22 MCP tools for Claude Desktop/Code integration
-- Semantic search, AI summarize/rephrase/suggest, rich links
-- ENML helpers (text, markdown, checklist to ENML)
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-
-git remote add origin git@github.com:imsebarz/evernote-mcp-server.git
-git push -u origin main
+if ! command -v npm >/dev/null 2>&1; then
+  echo "Error: npm is required. Install Node.js before running this script." >&2
+  exit 1
+fi
 
 echo ""
-echo "Done! Repo live at https://github.com/imsebarz/evernote-mcp-server"
+echo "Installing npm dependencies..."
+npm install
+
+echo ""
+if ! command -v git >/dev/null 2>&1; then
+  echo "Skipping private submodule setup because git is not installed."
+elif git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "Initializing private submodule..."
+  git submodule sync --recursive
+
+  if git submodule update --init --recursive private; then
+    echo "Private submodule is ready at private/."
+  else
+    echo "Warning: private submodule could not be initialized."
+    echo "This is expected for users without access to jonmlevine/evernote-mcp-private."
+    echo "Authorized users can run:"
+    echo "  gh auth login"
+    echo "  git submodule update --init --recursive private"
+  fi
+else
+  echo "Skipping private submodule setup because this directory is not a git checkout."
+fi
+
+echo ""
+if [ -f "private/SCANSNAP_CLASSIFICATION_PATTERNS.md" ]; then
+  echo "Private ScanSnap classification patterns found."
+else
+  echo "Private ScanSnap data is not available in this checkout."
+  echo "The core Evernote MCP server can still be built and run."
+fi
+
+echo ""
+echo "Setup complete. Useful commands:"
+echo "  npm run build"
+echo "  npm test"
+echo "  npm run auth"
+echo "  npm run mcp"
