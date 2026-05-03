@@ -16,6 +16,7 @@ import {
   type ServerResponse,
 } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { EvernoteClient } from "./client.js";
@@ -87,7 +88,13 @@ function startMcpProxy(): ChildProcess {
   if (API_KEY) args.push("--apiKey", API_KEY);
   if (process.env.MCP_PROXY_SERVER) args.push("--server", process.env.MCP_PROXY_SERVER);
 
-  args.push("--", "node", resolve(__dirname, "mcp-server.js"));
+  const builtMcpServer = resolve(__dirname, "mcp-server.js");
+  const sourceMcpServer = resolve(__dirname, "mcp-server.ts");
+  const mcpCommand = existsSync(builtMcpServer)
+    ? [process.execPath, builtMcpServer]
+    : [process.execPath, "--import", "tsx", sourceMcpServer];
+
+  args.push("--", ...mcpCommand);
 
   const child = spawn(resolve(__dirname, "../node_modules/.bin/mcp-proxy"), args, {
     stdio: "inherit",
@@ -182,11 +189,35 @@ async function handleRequest(
         const body: Body = await readBody(req);
         return sendResult(res, await handlers.scheduleReminder(client, id, body.reminderTime));
       }
+      if (sub === "attachments") {
+        if (method === "GET") {
+          return sendResult(res, await handlers.listAttachments(client, id));
+        }
+        if (method === "POST") {
+          const body: Body = await readBody(req);
+          return sendResult(res, await handlers.addAttachment(client, id, body));
+        }
+      }
+      if (sub === "ocr" && method === "GET") {
+        return sendResult(
+          res,
+          await handlers.getNoteOcrContents(client, id, {
+            includeSearchText: url.searchParams.get("includeSearchText") !== "false",
+          })
+        );
+      }
       if (sub === "thumbnail" && method === "GET") {
         return sendResult(res, handlers.getThumbnailUrl(client, id));
       }
       if (!sub) {
-        if (method === "GET") return sendResult(res, await handlers.getNote(client, id));
+        if (method === "GET") {
+          return sendResult(
+            res,
+            await handlers.getNote(client, id, {
+              includeContent: url.searchParams.get("includeContent") !== "false",
+            })
+          );
+        }
         if (method === "PUT") {
           const body: Body = await readBody(req);
           return sendResult(res, await handlers.updateNote(client, id, body));
@@ -223,6 +254,30 @@ async function handleRequest(
     if (tagId && method === "PUT") {
       const body: Body = await readBody(req);
       return sendResult(res, await handlers.updateTag(client, tagId, body));
+    }
+
+    // ─── Resources / Attachments ──────────────────────
+    if (pathname.startsWith("/api/resources/")) {
+      const parts = pathname.slice("/api/resources/".length).split("/");
+      const resourceId = decodeURIComponent(parts[0]);
+      const sub = parts[1];
+
+      if (resourceId && sub === "ocr" && method === "GET") {
+        return sendResult(
+          res,
+          await handlers.getResourceOcrContents(client, resourceId, {
+            noteId: url.searchParams.get("noteId") || undefined,
+          })
+        );
+      }
+      if (resourceId && !sub && method === "GET") {
+        return sendResult(
+          res,
+          await handlers.getAttachment(client, resourceId, {
+            includeData: url.searchParams.get("includeData") !== "false",
+          })
+        );
+      }
     }
 
     // ─── Search ───────────────────────────────────────

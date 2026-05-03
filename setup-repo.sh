@@ -1,30 +1,29 @@
-#!/bin/bash
-# Quick setup: init git, commit, and push to GitHub
-# Run this from the evernote-api folder on your machine
+#!/usr/bin/env bash
+# Local setup helper for evernote-mcp-server.
 
-set -e
+set -euo pipefail
 
-echo "Setting up evernote-mcp-server repo..."
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT_DIR"
 
-# Remove old .git if it exists (leftover from sandbox)
-rm -rf .git
+echo "Setting up evernote-mcp-server..."
 
-git init
-git branch -M main
-git add .gitignore README.md package.json package-lock.json tsconfig.json mcp.json src/
-git commit -m "Initial release: Evernote MCP Server v2.0.0
-
-Reverse-engineered unofficial Evernote API client with:
-- OAuth2 PKCE authentication (same flow as official web client)
-- Full REST API client with 30+ methods
-- 22 MCP tools for Claude Desktop/Code integration
-- Semantic search, AI summarize/rephrase/suggest, rich links
-- ENML helpers (text, markdown, checklist to ENML)
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
-
-git remote add origin git@github.com:imsebarz/evernote-mcp-server.git
-git push -u origin main
+if ! command -v npm >/dev/null 2>&1; then
+  echo "Error: npm is required. Install Node.js before running this script." >&2
+  exit 1
+fi
 
 echo ""
-echo "Done! Repo live at https://github.com/imsebarz/evernote-mcp-server"
+echo "Installing npm dependencies..."
+npm install
+
+echo ""
+echo "Creating local private workspace..."
+mkdir -p private
+
+echo ""
+echo "Setup complete. Useful commands:"
+echo "  npm run build"
+echo "  npm test"
+echo "  npm run auth"
+echo "  npm run mcp"

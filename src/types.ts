@@ -86,6 +86,7 @@ export interface UpdateNoteParams {
   id: string;
   title?: string;
   content?: string;
+  notebookId?: string;
   tagIds?: string[];
   attributes?: NoteAttributes;
 }
@@ -154,13 +155,52 @@ export interface Resource {
   filename?: string;
   size?: number;
   hash?: string;
+  active?: boolean;
 }
+
+export type AttachmentDataEncoding = "base64" | "utf8";
 
 export interface CreateAttachmentParams {
   noteId: string;
   filename: string;
-  mime: string;
-  data: Buffer | Uint8Array;
+  mime?: string;
+  data: Buffer | Uint8Array | string;
+  /** How to decode string data. Buffer and Uint8Array values ignore this. */
+  dataEncoding?: AttachmentDataEncoding;
+}
+
+export type Attachment = Resource;
+
+export interface AttachmentData extends Attachment {
+  data?: string;
+  encoding?: "base64";
+}
+
+// --- OCR / Recognition ---
+
+export interface OcrRecognition {
+  content?: string;
+  size?: number;
+  hash?: string;
+}
+
+export interface NoteResourceOcr {
+  id: string;
+  dataHash?: string;
+  recognition?: OcrRecognition;
+  searchText?: string;
+}
+
+export interface NoteOcrContents {
+  noteId: string;
+  resources: NoteResourceOcr[];
+}
+
+export interface ResourceOcrContents {
+  resourceId: string;
+  noteId?: string;
+  recognition?: OcrRecognition;
+  searchText?: string;
 }
 
 // --- Shortcuts ---

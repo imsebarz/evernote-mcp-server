@@ -9,3 +9,5 @@ dist/
 .env
 .evernote-api/
 tokens.json
+.zed/**
+/private/

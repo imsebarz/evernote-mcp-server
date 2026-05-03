@@ -1,6 +1,10 @@
 # evernote-unofficial-api
 
-Unofficial Evernote API client & MCP server, reverse-engineered from the Evernote Web App (Ion v11.10.1). Full CRUD, semantic search, AI features, and 22 MCP tools for Claude Desktop / Claude Code.
+Unofficial Evernote API client & MCP server, reverse-engineered from Evernote's web and desktop clients. Full CRUD, attachments, semantic search, AI features, resource OCR, and 31 MCP tools for Claude Desktop / Claude Code.
+
+## License
+
+This public repository is licensed under the MIT License. See [LICENSE](LICENSE).
 
 ## MCP Server — Quick Start
 
@@ -37,15 +41,88 @@ Add to your Claude Desktop config (`~/Library/Application Support/Claude/claude_
 claude mcp add evernote -- npx tsx src/mcp-server.ts
 ```
 
-### 22 MCP Tools Available
+### Codex CLI Integration
+
+Run the setup commands from this repository after installing dependencies and authenticating.
+
+```bash
+codex mcp add evernote -- npx tsx src/mcp-server.ts
+codex mcp list
+```
+
+For a persistent config entry, add this to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.evernote]
+command = "npx"
+args = ["tsx", "src/mcp-server.ts"]
+cwd = "/path/to/evernote-mcp-server"
+```
+
+Use the absolute path to this repository for `cwd` if you start Codex from another directory.
+
+### GitHub CLI Integration
+
+GitHub's MCP-capable command-line client is GitHub Copilot CLI. If you use it through GitHub CLI, run it with `gh copilot`.
+
+```bash
+# Standalone Copilot CLI
+copilot mcp add evernote --type stdio --tools '*' -- npx tsx src/mcp-server.ts
+copilot mcp list
+
+# Via GitHub CLI
+gh copilot -- mcp add evernote --type stdio --tools '*' -- npx tsx src/mcp-server.ts
+```
+
+Or add this persistent entry to `~/.copilot/mcp-config.json`:
+
+```json
+{
+  "mcpServers": {
+    "evernote": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["tsx", "src/mcp-server.ts"],
+      "cwd": "/path/to/evernote-mcp-server",
+      "env": {},
+      "tools": ["*"]
+    }
+  }
+}
+```
+
+Use the absolute path to this repository for `cwd` if you start Copilot from another directory.
+
+## Private Directory
+
+`private/` is a local-only workspace for account-specific exports, OCR review files, and other data that should not be committed to the public repository. It is ignored by Git and excluded from npm packages.
+
+`./setup-repo.sh` creates the directory automatically. To create it manually:
+
+```bash
+mkdir -p private
+```
+
+Keep private ScanSnap and review artifacts under this directory, for example:
+
+- `private/SCANSNAP_CLASSIFICATION_PATTERNS.md`
+- `private/scansnap-title-tag-suggestions.csv`
+- `private/scansnap-title-tag-suggestions.md`
+- `private/scansnap-evernote-update-results.json`
+
+Do not copy these files to the repository root. If they need version control, use a separate private repository or a nested Git checkout inside `private/`; do not add it as a submodule in the public repo.
+
+### 31 MCP Tools Available
 
 | Category | Tools |
 |---|---|
-| **Notes** | `create_note`, `update_note`, `delete_note`, `export_notes`, `schedule_reminder` |
-| **Notebooks** | `create_notebook`, `delete_notebook` |
-| **Tags** | `create_tag`, `update_tag` |
+| **Notes** | `create_note`, `update_note`, `delete_note`, `get_note`, `export_notes`, `schedule_reminder` |
+| **Attachments** | `list_attachments`, `add_attachment`, `get_attachment` |
+| **Notebooks** | `list_notebooks`, `get_notebook`, `create_notebook`, `delete_notebook` |
+| **Tags** | `list_tags`, `create_tag`, `update_tag` |
 | **Search** | `search_notes` (semantic AI), `ask_notes` (Q&A), `find_related` |
 | **AI** | `ai_summarize`, `ai_rephrase`, `ai_suggest_tags`, `ai_suggest_title` |
+| **OCR** | `get_note_ocr`, `get_resource_ocr` |
 | **Account** | `get_user`, `get_usage` |
 | **Shortcuts** | `create_shortcut`, `delete_shortcut` |
 | **Utils** | `get_thumbnail_url`, `rich_link` |
@@ -109,6 +186,26 @@ const rephrased = await client.aiRephrase({
 // Export notes
 await client.exportNotes(["noteId1", "noteId2"]);
 
+// Add a PDF, Word, PowerPoint, Excel, image, or other file attachment
+await client.addAttachment({
+  noteId: "noteGuid",
+  filename: "quarterly-report.xlsx",
+  data: fileBuffer, // Buffer/Uint8Array, or base64 string with dataEncoding: "base64"
+});
+
+// List and retrieve attachments. Retrieved binary data is base64 encoded.
+const attachments = await client.listAttachments("noteGuid");
+const attachment = await client.getAttachment("resourceGuid");
+
+// Get OCR/recognition content for resources attached to a note
+const noteOcr = await client.getNoteOcrContents("noteGuid");
+
+// Get OCR/search text for one resource. Passing the parent note ID avoids
+// an extra NoteStore lookup; omit it if you only have the resource ID.
+const resourceOcr = await client.getResourceOcrContents("resourceGuid", {
+  noteId: "parentNoteGuid",
+});
+
 // Raw request to any endpoint
 await client.raw("GET", "/v1/some/endpoint", undefined, { param: "value" });
 ```
@@ -159,8 +256,143 @@ await client.raw("GET", "/v1/some/endpoint", undefined, { param: "value" });
 ### Utilities
 - `richLink(url)` — Generate rich link preview
 - `ocrBusinessCard(imageData)` — OCR a business card
+- `listAttachments(noteId)` — List metadata for all attachments/resources on a note
+- `addAttachment(params)` — Add a binary attachment to a note
+- `getAttachment(resourceId, options?)` — Retrieve attachment metadata and optional base64 data
+- `getNoteOcrContents(noteId, options?)` — Get OCR/recognition content for all resources attached to a note
+- `getResourceOcrContents(resourceId, options?)` — Get OCR/recognition content and search text for one resource
 - `getThumbnailUrl(noteId)` — Get note thumbnail URL
 - `getUserPhotoUrl(size)` — Get user photo URL
+
+## REST API
+
+Start the REST API server with:
+
+```bash
+npm run api
+```
+
+By default it listens on `http://localhost:8080`. If `MCP_PROXY_API_KEY` is set, pass it as `X-API-Key`.
+
+### Attachments
+
+Attachments are stored as Evernote resources and inserted into the note body with an ENML `<en-media>` tag. MIME type can be passed explicitly or inferred from common file extensions, including PDF, Word (`.doc`, `.docx`), PowerPoint (`.ppt`, `.pptx`), Excel (`.xls`, `.xlsx`), images, text, CSV, RTF, ZIP, and unknown binary files.
+
+#### List attachments on a note
+
+```http
+GET /api/notes/:noteId/attachments
+```
+
+Response shape:
+
+```json
+[
+  {
+    "id": "resource-guid",
+    "noteId": "note-guid",
+    "mime": "application/pdf",
+    "filename": "scan.pdf",
+    "size": 12345,
+    "hash": "md5-resource-hash"
+  }
+]
+```
+
+#### Add an attachment to a note
+
+```http
+POST /api/notes/:noteId/attachments
+Content-Type: application/json
+
+{
+  "filename": "quarterly-report.xlsx",
+  "mime": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "data": "BASE64_ENCODED_BYTES",
+  "dataEncoding": "base64"
+}
+```
+
+`mime` is optional when the filename extension is recognized. `dataEncoding` defaults to `base64`; use `utf8` only for plain text payloads.
+
+#### Retrieve an attachment
+
+```http
+GET /api/resources/:resourceId
+GET /api/resources/:resourceId?includeData=false
+```
+
+Response shape:
+
+```json
+{
+  "id": "resource-guid",
+  "noteId": "note-guid",
+  "mime": "application/pdf",
+  "filename": "scan.pdf",
+  "size": 12345,
+  "hash": "md5-resource-hash",
+  "data": "BASE64_ENCODED_BYTES",
+  "encoding": "base64"
+}
+```
+
+Use `includeData=false` when you only need metadata.
+
+### OCR / Recognition
+
+These routes use Evernote's Quasar Query backend (`https://api.evernote.com/query/v1/graphql`), the same backend used by newer Evernote desktop clients for resource recognition and search text.
+
+#### Get OCR contents for a note
+
+```http
+GET /api/notes/:noteId/ocr
+GET /api/notes/:noteId/ocr?includeSearchText=false
+```
+
+Response shape:
+
+```json
+{
+  "noteId": "note-guid",
+  "resources": [
+    {
+      "id": "resource-guid",
+      "dataHash": "resource-data-hash",
+      "recognition": {
+        "content": "<recoIndex>...</recoIndex>",
+        "size": 1234,
+        "hash": "recognition-hash"
+      },
+      "searchText": "plain searchable OCR text"
+    }
+  ]
+}
+```
+
+`includeSearchText` defaults to `true`. The `recognition.content` value is Evernote's recognition XML; `searchText` is the backend's extracted searchable text when available.
+
+#### Get OCR contents for one resource
+
+```http
+GET /api/resources/:resourceId/ocr
+GET /api/resources/:resourceId/ocr?noteId=:parentNoteId
+```
+
+Response shape:
+
+```json
+{
+  "resourceId": "resource-guid",
+  "noteId": "parent-note-guid",
+  "recognition": {
+    "content": "<recoIndex>...</recoIndex>"
+  },
+  "searchText": "plain searchable OCR text"
+}
+```
+
+Passing `noteId` is recommended when you already know the parent note. If omitted, the client looks up the resource metadata through NoteStore before calling Quasar, because the backend requires parent note metadata for resource OCR.
 
 ## ENML Helpers
 
@@ -190,11 +422,28 @@ enmlToText("<en-note><p>Hello</p></en-note>");
 
 ```
 Your Code → EvernoteClient → api.evernote.com (REST /v1/*)
+                           → api.evernote.com/query (Quasar GraphQL OCR)
                            → api.evernote.com/command (NSync mutations)
                            → www.evernote.com/shard/{s}/notestore (Thrift, advanced)
 ```
 
 Auth tokens are obtained via OAuth2 PKCE against `accounts.evernote.com` — the same flow the official web client uses.
+
+## Testing
+
+```bash
+npm test
+```
+
+Live OCR backend checks are skipped unless you provide a note/resource pair:
+
+```bash
+EVERNOTE_LIVE_OCR_NOTE_ID=note-guid \
+EVERNOTE_LIVE_OCR_RESOURCE_ID=resource-guid \
+npm test
+```
+
+Use a resource that belongs to the note ID. The resource-level Quasar OCR route requires the parent note metadata.
 
 ---
 
