@@ -31,4 +31,7 @@ Recent history uses short imperative subjects, sometimes with Conventional Commi
 
 Never commit token files. OAuth tokens default to `~/.evernote-api/tokens.json`; production examples use `EVERNOTE_TOKEN_PATH`. Keep secrets in environment variables or mounted volumes, not source files.
 
+## Private ScanSnap Data
+
+Private ScanSnap classification files live in the `private/` submodule, which points to the private `jonmlevine/evernote-mcp-private` repository. When updating ScanSnap title, tag, or notebook suggestions, read `private/SCANSNAP_CLASSIFICATION_PATTERNS.md` first if the submodule is available. Treat user-corrected and user-confirmed CSV rows as ground truth, use backend OCR before fallbacks, and do not modify Evernote notes unless explicitly requested.
 
