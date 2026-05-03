@@ -59,9 +59,10 @@ export async function listNotes(
 
 export async function getNote(
   client: EvernoteClient,
-  noteId: string
+  noteId: string,
+  args: { includeContent?: boolean } = {}
 ): Promise<HandlerResult> {
-  return fromApi(await client.getNote(noteId));
+  return fromApi(await client.getNote(noteId, { includeContent: args.includeContent !== false }));
 }
 
 export async function createNote(

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { updateNote } from "../src/route-handlers.js";
+import { getNote, updateNote } from "../src/route-handlers.js";
 
 test("updateNote passes notebookId through to the client", async () => {
   let captured: unknown;
@@ -28,5 +28,27 @@ test("updateNote passes notebookId through to the client", async () => {
     title: "Updated",
     notebookId: "notebook-1",
     tagIds: ["tag-1"],
+  });
+});
+
+test("getNote passes includeContent through to the client", async () => {
+  let captured: unknown;
+  const client = {
+    async getNote(noteId: string, options: unknown) {
+      captured = { noteId, options };
+      return {
+        ok: true,
+        status: 200,
+        data: { id: noteId, title: "Metadata only" },
+      };
+    },
+  };
+
+  const result = await getNote(client as never, "note-1", { includeContent: false });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(captured, {
+    noteId: "note-1",
+    options: { includeContent: false },
   });
 });

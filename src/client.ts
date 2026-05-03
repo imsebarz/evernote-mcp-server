@@ -389,10 +389,13 @@ export class EvernoteClient {
 
   // ─── Get by ID ──────────────────────────────────────────
 
-  /** Get a single note by ID (full content) */
-  async getNote(noteId: string): Promise<ApiResponse<Note>> {
+  /** Get a single note by ID. Full content is included by default. */
+  async getNote(
+    noteId: string,
+    options: { includeContent?: boolean } = {}
+  ): Promise<ApiResponse<Note>> {
     if (selectGetNoteBackend() === "notestore") {
-      return getNoteViaNoteStore(this.tokens, noteId);
+      return getNoteViaNoteStore(this.tokens, noteId, options.includeContent !== false);
     }
 
     return this.request<Note>(

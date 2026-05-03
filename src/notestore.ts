@@ -171,6 +171,10 @@ function mapNoteMetadata(note: RawNoteMetadata): SearchResult {
   };
 }
 
+export function updateRequiresNoteContent(params: UpdateNoteParams): boolean {
+  return params.content !== undefined;
+}
+
 function normalizeBuffer(value: unknown): Buffer | undefined {
   if (value == null) return undefined;
   if (Buffer.isBuffer(value)) return value;
@@ -393,14 +397,15 @@ export async function createTagViaNoteStore(
 
 export async function getNoteViaNoteStore(
   tokens: AuthTokens,
-  noteId: string
+  noteId: string,
+  includeContent = true
 ): Promise<ApiResponse<Note>> {
   try {
     const note = await callNoteStore<RawNote>(
       tokens,
       "getNote",
       noteId,
-      true,
+      includeContent,
       false,
       false,
       false
@@ -597,11 +602,12 @@ export async function updateNoteViaNoteStore(
   params: UpdateNoteParams
 ): Promise<ApiResponse<Note>> {
   try {
+    const includeContent = updateRequiresNoteContent(params);
     const current = await callNoteStore<RawNote>(
       tokens,
       "getNote",
       params.id,
-      true,
+      includeContent,
       false,
       false,
       false
@@ -622,7 +628,7 @@ export async function updateNoteViaNoteStore(
       tokens,
       "getNote",
       params.id,
-      true,
+      includeContent,
       false,
       false,
       false

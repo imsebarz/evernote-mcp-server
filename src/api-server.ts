@@ -210,7 +210,14 @@ async function handleRequest(
         return sendResult(res, handlers.getThumbnailUrl(client, id));
       }
       if (!sub) {
-        if (method === "GET") return sendResult(res, await handlers.getNote(client, id));
+        if (method === "GET") {
+          return sendResult(
+            res,
+            await handlers.getNote(client, id, {
+              includeContent: url.searchParams.get("includeContent") !== "false",
+            })
+          );
+        }
         if (method === "PUT") {
           const body: Body = await readBody(req);
           return sendResult(res, await handlers.updateNote(client, id, body));
